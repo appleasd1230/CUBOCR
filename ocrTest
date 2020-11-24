@@ -1,0 +1,80 @@
+import cv2
+import pytesseract
+import numpy as np
+
+def cathayOCR(origineImage,resize_num=2,threshold=128,erodeIterationTimes=3,dilateIterationTimes=1,medianBlurKernel=5,isRevert=True):
+
+    isShowImg = True
+
+    origineImage = cv2.copyMakeBorder(origineImage,1,1,1,1,cv2.BORDER_CONSTANT,value=[255,255,255])
+    # resize
+    origineImage = cv2.resize(origineImage,(origineImage.shape[1] * int(resize_num), origineImage.shape[0] * int(resize_num)), interpolation=cv2.INTER_CUBIC)
+
+    # gray
+    grayImg = cv2.cvtColor(origineImage, cv2.COLOR_BGR2GRAY)
+
+    # binary
+    retval, binImg = cv2.threshold(grayImg, threshold, 255, cv2.THRESH_BINARY_INV)
+
+    # erode
+    erodeImg = cv2.erode(binImg, (5, 5), iterations=erodeIterationTimes)
+
+    # dilate
+    dilateImg = cv2.dilate(erodeImg, (5, 5), iterations=dilateIterationTimes)
+
+    # medianBlur
+    medianBImg = cv2.medianBlur(dilateImg, medianBlurKernel)
+
+
+    # 反相
+    if isRevert:
+        resultImg = 255 - medianBImg
+
+    if isShowImg:
+        cv2.imshow('oriImg', origineImage)
+        cv2.imshow('grayImg', grayImg)
+        cv2.imshow('binImg', binImg)
+        cv2.imshow('erodeImg', erodeImg)
+        cv2.imshow('dilateImg', dilateImg)
+        cv2.imshow('medianBlur', medianBImg)
+        cv2.imshow('resultImg', resultImg)
+        # contour
+        w_max = 0
+        contours, hierarchy = cv2.findContours(dilateImg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for c in contours:
+            x, y, w, h = cv2.boundingRect(c)
+            if w>w_max:
+                w_max = w
+            #cv2.rectangle(origineImage, (x, y), (x + w, y + h), (0, 255, 0), 2, cv2.LINE_AA)
+        #cv2.imshow('origineImage', origineImage)
+        print('w_max:',w_max)
+        result = []
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            if w == w_max:  # w_max是所有contonur的寬度中最寬的值
+                box_left = [[x, y], [x + int(w / 2), y], [x + int(w / 2), y + h], [x, y + h]]
+                box_right = [[x + int(w / 2), y], [x + w, y], [x + w, y + h],[x + int(w / 2), y + h]]
+                result.append(box_left)
+                result.append(box_right)
+            else:
+                box = np.int0([[x, y], [x + w, y], [x + w, y + h], [x, y + h]])
+                result.append(box)
+        npresult = np.array(result)
+        for box in npresult:
+            cv2.drawContours(origineImage, [box], 0, (0, 0, 255), 2)
+            #roi = im_res[box[0][1]:box[3][1], box[0][0]:box[1][0]]
+            #roistd = cv2.resize(roi, (30, 30))  # 將字元圖片統一調整為30x30的圖片大小
+            #timestamp = int(time.time() * 1e6)  # 為防止檔案重名，使用時間戳命名檔名
+            #filename = "{}.jpg".format(timestamp)
+            #filepath = os.path.join("char", filename)
+            #cv2.imwrite(filepath, roistd)
+        cv2.imshow('origineImage', origineImage)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+    return (pytesseract.image_to_string(resultImg, lang='eng', config='--psm 6 '))
+
+if __name__ == "__main__":
+    path = '/Users/moriakiraakira/Desktop/OCR_Sample/2-3.png'
+    origineImage = cv2.imread(path)
+    print(cathayOCR(origineImage))
